@@ -231,9 +231,7 @@ func testActionSet(t *testing.T, db *gorm.DB) {
 			Value:      json.RawMessage(`{"item": "my value"}`),
 		}
 
-		testCol := store.Use(item.Collection)
-
-		err = testCol.Set(item.ID, item.Value)
+		err = store.Set(item.ID, item.Collection, item.Value)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
@@ -260,16 +258,14 @@ func testActionSet(t *testing.T, db *gorm.DB) {
 			Value:      json.RawMessage(`{"item": "my value"}`),
 		}
 
-		testCol := store.Use(item.Collection)
-
-		err = testCol.Set(item.ID, item.Value)
+		err = store.Set(item.ID, item.Collection, item.Value)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
 
 		// Update the document with new data
 		item.Value = json.RawMessage(`{"item": "updated value"}`)
-		err = testCol.Set(item.ID, item.Value)
+		err = store.Set(item.ID, item.Collection, item.Value)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
@@ -293,11 +289,10 @@ func testActionSet(t *testing.T, db *gorm.DB) {
 		item1 := dbDocument{
 			ID:         "item1",
 			Collection: "collection1",
-			Value:      json.RawMessage(`{"item": "my value"}`),
+			Value:      json.RawMessage(`{"item": "my value1"}`),
 		}
-		testCol := store.Use(item1.Collection)
 
-		err = testCol.Set(item1.ID, item1.Value)
+		err = store.Set(item1.ID, item1.Collection, item1.Value)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
@@ -309,9 +304,7 @@ func testActionSet(t *testing.T, db *gorm.DB) {
 			Value:      json.RawMessage(`{"item": "my value2"}`),
 		}
 
-		testCol2 := store.Use(item2.Collection)
-
-		err = testCol2.Set(item2.ID, item2.Value)
+		err = store.Set(item2.ID, item2.Collection, item2.Value)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
@@ -345,15 +338,13 @@ func testActionGet(t *testing.T, db *gorm.DB) {
 			Value:      json.RawMessage(`{"item": "my value"}`),
 		}
 
-		testCol := store.Use(item.Collection)
-
-		err = testCol.Set(item.ID, item.Value)
+		err = store.Set(item.ID, item.Collection, item.Value)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
 
 		var got json.RawMessage
-		err = testCol.Get(item.ID, &got)
+		err = store.Get(item.ID, item.Collection, &got)
 		if err != nil {
 			t.Fatalf("action: Get,  returned an error: %v", err)
 		}
@@ -373,22 +364,20 @@ func testActionGet(t *testing.T, db *gorm.DB) {
 			Value:      json.RawMessage(`{"item": "my value"}`),
 		}
 
-		testCol := store.Use(item.Collection)
-
-		err = testCol.Set(item.ID, item.Value)
+		err = store.Set(item.ID, item.Collection, item.Value)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
 
 		// Update the document with new data
 		item.Value = json.RawMessage(`{"item": "updated value"}`)
-		err = testCol.Set(item.ID, item.Value)
+		err = store.Set(item.ID, item.Collection, item.Value)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
 
 		var got json.RawMessage
-		err = testCol.Get(item.ID, &got)
+		err = store.Get(item.ID, item.Collection, &got)
 		if err != nil {
 			t.Fatalf("action: Get,  returned an error: %v", err)
 		}
@@ -407,9 +396,8 @@ func testActionGet(t *testing.T, db *gorm.DB) {
 			Collection: "collection1",
 			Value:      json.RawMessage(`{"item": "my value"}`),
 		}
-		testCol := store.Use(item1.Collection)
 
-		err = testCol.Set(item1.ID, item1.Value)
+		err = store.Set(item1.ID, item1.Collection, item1.Value)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
@@ -421,16 +409,14 @@ func testActionGet(t *testing.T, db *gorm.DB) {
 			Value:      json.RawMessage(`{"item": "my value2"}`),
 		}
 
-		testCol2 := store.Use(item2.Collection)
-
-		err = testCol2.Set(item2.ID, item2.Value)
+		err = store.Set(item2.ID, item2.Collection, item2.Value)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
 
 		// retrieve item 1
 		var got json.RawMessage
-		err = testCol.Get(item1.ID, &got)
+		err = store.Get(item1.ID, item1.Collection, &got)
 		if err != nil {
 			t.Fatalf("action: Get,  returned an error: %v", err)
 		}
@@ -439,7 +425,7 @@ func testActionGet(t *testing.T, db *gorm.DB) {
 		}
 
 		// retrieve item 2
-		err = testCol2.Get(item2.ID, &got)
+		err = store.Get(item2.ID, item2.Collection, &got)
 		if err != nil {
 			t.Fatalf("action: Get,  returned an error: %v", err)
 		}
@@ -457,18 +443,17 @@ func testActionList(t *testing.T, db *gorm.DB) {
 	}
 
 	// add 3 items to collection 1
-	col1 := store.Use("col1")
+
 	for i := 1; i <= 3; i++ {
-		err = col1.Set(fmt.Sprintf("item%d", i),
+		err = store.Set(fmt.Sprintf("item%d", i), "col1",
 			json.RawMessage(fmt.Sprintf("{\"item\": \"collection1 item%d\"}", i)))
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
 	}
 	// add 5 items to collection 1
-	col2 := store.Use("col2")
 	for i := 1; i <= 5; i++ {
-		err = col2.Set(fmt.Sprintf("item%d", i),
+		err = store.Set(fmt.Sprintf("item%d", i), "col2",
 			json.RawMessage(fmt.Sprintf("{\"item\": \"collection2 item%d\"}", i)))
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
@@ -476,7 +461,7 @@ func testActionList(t *testing.T, db *gorm.DB) {
 	}
 
 	t.Run("asert collection length", func(t *testing.T) {
-		_, len1, err := col1.List(0, 1)
+		_, len1, err := store.List("col1", 0, 1)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
@@ -484,7 +469,7 @@ func testActionList(t *testing.T, db *gorm.DB) {
 			t.Errorf("unexpected value (-got +want)\n%s", diff)
 		}
 
-		_, len2, err := col2.List(0, 1)
+		_, len2, err := store.List("col2", 0, 1)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
@@ -494,7 +479,7 @@ func testActionList(t *testing.T, db *gorm.DB) {
 	})
 
 	t.Run("asert listed items", func(t *testing.T) {
-		items, _, err := col1.List(0, 1)
+		items, _, err := store.List("col1", 0, 1)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
@@ -510,7 +495,7 @@ func testActionList(t *testing.T, db *gorm.DB) {
 	})
 
 	t.Run("asert list with limit", func(t *testing.T) {
-		items, _, err := col1.List(2, 1)
+		items, _, err := store.List("col1", 2, 1)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
@@ -525,7 +510,7 @@ func testActionList(t *testing.T, db *gorm.DB) {
 	})
 
 	t.Run("asert list with limit and page", func(t *testing.T) {
-		items, _, err := col1.List(2, 2)
+		items, _, err := store.List("col1", 2, 2)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}

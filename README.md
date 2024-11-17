@@ -27,8 +27,7 @@ db is a simple kv implementation that uses gorm to store the jsons as string in 
  * http endpoints for crud
  * persistance using sql/gorm
  * persistance using plain text json
- * add a hook to change the key name, e.g. to add a userid
-   * list wit work with this, 
+ * use collection name concatenated with useage to differenciate between users
 
 
 ## http

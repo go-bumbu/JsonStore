@@ -27,8 +27,6 @@ const (
 	ManualFlush          // force manual flush instead of automatically write/read
 )
 
-const InMemoryDb = "memory"
-
 func isFlagSet(in []DbFlag, search DbFlag) bool {
 	for i := 0; i < len(in); i++ {
 		if in[i] == search {

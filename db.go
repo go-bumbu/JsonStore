@@ -33,36 +33,29 @@ type DbStore struct {
 	db *gorm.DB
 }
 
+// make sure the DB store fulfills the JsonStore interface
+var _ JsonStore = &DbStore{}
+
+const DefaultCollection = "default"
+
 func NewDbStore(db *gorm.DB) (*DbStore, error) {
 	err := db.AutoMigrate(&dbDocument{})
 	if err != nil {
 		return nil, err
 	}
-	return &DbStore{db: db}, nil
+	store := DbStore{
+		db: db,
+	}
+	return &store, nil
 }
 
-const defColName = "default"
-
-func (store *DbStore) Use(collection string) *DbCollection {
+func (store *DbStore) Set(key, collection string, value json.RawMessage) error {
 	if collection == "" {
-		collection = defColName
+		collection = DefaultCollection
 	}
-	return &DbCollection{
-		db:  store.db,
-		col: collection,
-	}
-}
-
-// DbCollection represents a single collection of data
-type DbCollection struct {
-	db  *gorm.DB
-	col string
-}
-
-func (store *DbCollection) Set(key string, value json.RawMessage) error {
 	doc := dbDocument{
 		ID:         key,
-		Collection: store.col,
+		Collection: collection,
 		Value:      value,
 	}
 
@@ -78,13 +71,15 @@ func (store *DbCollection) Set(key string, value json.RawMessage) error {
 	return nil
 }
 
-func (store *DbCollection) Get(key string, value *json.RawMessage) error {
+func (store *DbStore) Get(key, collection string, value *json.RawMessage) error {
+	if collection == "" {
+		collection = DefaultCollection
+	}
 
 	item := dbDocument{}
-
 	err := store.db.Model(&dbDocument{}).
 		Select(columnValue).
-		Where(fmt.Sprintf("%s = ? AND %s = ?", columnId, columnCollection), key, store.col).
+		Where(fmt.Sprintf("%s = ? AND %s = ?", columnId, columnCollection), key, collection).
 		First(&item).Error
 	*value = item.Value
 
@@ -99,8 +94,10 @@ func (store *DbCollection) Get(key string, value *json.RawMessage) error {
 
 const MaxListItems = 20
 
-func (store *DbCollection) List(limit, page int) (map[string]json.RawMessage, int64, error) {
-
+func (store *DbStore) List(collection string, limit, page int) (map[string]json.RawMessage, int64, error) {
+	if collection == "" {
+		collection = DefaultCollection
+	}
 	if limit == 0 || limit > MaxListItems {
 		limit = MaxListItems
 	}
@@ -112,17 +109,17 @@ func (store *DbCollection) List(limit, page int) (map[string]json.RawMessage, in
 	var count int64
 	// Perform a count query based on the collection column.
 	err := store.db.Model(&dbDocument{}).
-		Where(fmt.Sprintf("%s = ? ", columnCollection), store.col).
+		Where(fmt.Sprintf("%s = ? ", columnCollection), collection).
 		Count(&count).Error
 	if err != nil {
-		return nil, 0, fmt.Errorf("failed to count items in collection %s: %v", store.col, err)
+		return nil, 0, fmt.Errorf("failed to count items in collection %s: %v", collection, err)
 	}
 
 	items := []dbDocument{}
 	// Query the database to get all the documents in the collection
 	err = store.db.
 		Model(&dbDocument{}).
-		Where(fmt.Sprintf("%s = ? ", columnCollection), store.col).
+		Where(fmt.Sprintf("%s = ? ", columnCollection), collection).
 		Order("id ASC").
 		Limit(limit).
 		Offset(offset).
@@ -138,10 +135,12 @@ func (store *DbCollection) List(limit, page int) (map[string]json.RawMessage, in
 	return result, count, nil
 }
 
-func (store *DbCollection) Delete(key string) (int64, error) {
-	// Perform the delete operation based on the document's ID and collection name
+func (store *DbStore) Delete(key, collection string) (int64, error) {
+	if collection == "" {
+		collection = DefaultCollection
+	}
 	result := store.db.
-		Where(fmt.Sprintf("%s = ? AND %s = ?", columnId, columnCollection), key, store.col).
+		Where(fmt.Sprintf("%s = ? AND %s = ?", columnId, columnCollection), key, collection).
 		Delete(&dbDocument{})
 
 	// Check if there was an error during the deletion
