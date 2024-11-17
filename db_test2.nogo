@@ -1,0 +1,182 @@
+package jsonstore_test
+
+import (
+	"encoding/json"
+	"errors"
+	"github.com/davecgh/go-spew/spew"
+	"github.com/go-bumbu/jsonstore"
+	"github.com/google/go-cmp/cmp"
+	"gorm.io/gorm"
+	"testing"
+)
+
+var _ = spew.Dump //keep the dependency
+
+func testNewDb(t *testing.T, db *gorm.DB) {
+	_, err := jsonstore.NewDbStore(db)
+	if err != nil {
+		t.Fatalf("NewDbStore returned an error: %v", err)
+	}
+
+	// Verify the dbDocument table was created by checking for its existence
+	if !db.Migrator().HasTable(&jsonstore.dbDocument{}) {
+		t.Fatal("expected dbDocument table to be created, but it does not exist")
+	}
+}
+
+func testCreateOrUpdate(t *testing.T, db *gorm.DB) {
+	store, err := jsonstore.NewDbStore(db)
+	if err != nil {
+		t.Fatalf("NewDbStore returned an error: %v", err)
+	}
+
+	doc := jsonstore.dbDocument{
+		ID:    "123",
+		Value: json.RawMessage(`{"item": "my value"}`),
+	}
+
+	// Call CreateOrUpdate and check for errors
+	if err := store.CreateOrUpdate(doc); err != nil {
+		t.Fatalf("CreateOrUpdate returned an error: %v", err)
+	}
+
+	// Retrieve the document from the database and verify its content
+	var got jsonstore.dbDocument
+	if err := db.First(&got, "ID = ?", doc.ID).Error; err != nil {
+		t.Fatalf("failed to retrieve document: %v", err)
+	}
+
+	if diff := cmp.Diff(got, doc); diff != "" {
+		t.Errorf("unexpected value (-got +want)\n%s", diff)
+	}
+
+	// Update the document with new data
+	doc.Value = json.RawMessage(`{"item": "updated value"}`)
+	if err := store.CreateOrUpdate(doc); err != nil {
+		t.Fatalf("CreateOrUpdate returned an error on update: %v", err)
+	}
+
+	// Verify the update by fetching the document again
+	if err := db.First(&got, "ID = ?", doc.ID).Error; err != nil {
+		t.Fatalf("failed to retrieve document: %v", err)
+	}
+	if diff := cmp.Diff(got, doc); diff != "" {
+		t.Errorf("unexpected value (-got +want)\n%s", diff)
+	}
+
+}
+
+func testDelete(t *testing.T, db *gorm.DB) {
+	store, err := jsonstore.NewDbStore(db)
+	if err != nil {
+		t.Fatalf("NewDbStore returned an error: %v", err)
+	}
+	docKey := "123" // the key we want to check
+
+	_ = store.CreateOrUpdate(jsonstore.dbDocument{
+		ID:    docKey,
+		Value: json.RawMessage(`{"item": "test data"}`),
+	})
+	_ = store.CreateOrUpdate(jsonstore.dbDocument{
+		ID:    "124",
+		Value: json.RawMessage(`{"item": "banana"}`),
+	})
+
+	// Call the Delete method to delete the document
+	if err := store.Delete(docKey); err != nil {
+		t.Fatalf("Delete returned an error: %v", err)
+	}
+
+	// Attempt to retrieve the document from the database after deletion
+	var got jsonstore.dbDocument
+	err = db.First(&got, "ID = ?", docKey).Error
+	if err == nil {
+		t.Errorf("expected document to be deleted, but it still exists in the database")
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Errorf("expected ErrRecordNotFound after deletion, got: %v", err)
+	}
+
+}
+
+func testGet(t *testing.T, db *gorm.DB) {
+
+	store, err := jsonstore.NewDbStore(db)
+	if err != nil {
+		t.Fatalf("NewDbStore returned an error: %v", err)
+	}
+
+	tcs := []struct {
+		name        string
+		limit       int      // limit results
+		page        int      // page to request
+		expect      []string // slice containing the data strings
+		expectCount int      // expected size of the result
+	}{
+		{
+			name: "get all values without any parameter",
+			expect: []string{
+				"test data", "banana", "apple pie", "american pie",
+			},
+			expectCount: 4,
+		},
+		{
+			name:  "assert limit",
+			limit: 2,
+			expect: []string{
+				"test data", "banana",
+			},
+			expectCount: 4,
+		},
+		{
+			name:  "assert limit and page",
+			limit: 3,
+			page:  1,
+			expect: []string{
+				"american pie"},
+			expectCount: 4,
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+
+			// Create and insert documents into the database
+			doc1 := jsonstore.dbDocument{ID: "123", Value: json.RawMessage(`{"item": "test data"}`)}
+			doc2 := jsonstore.dbDocument{ID: "124", Value: json.RawMessage(`{"item": "banana"}`)}
+			doc3 := jsonstore.dbDocument{ID: "125", Value: json.RawMessage(`{"item": "this is going to be overrriten"}`)}
+			doc31 := jsonstore.dbDocument{ID: "125", Value: json.RawMessage(`{"item": "apple pie"}`)}
+			doc4 := jsonstore.dbDocument{ID: "126", Value: json.RawMessage(`{"item": "american pie"}`)}
+
+			_ = store.CreateOrUpdate(doc1)
+			_ = store.CreateOrUpdate(doc2)
+			_ = store.CreateOrUpdate(doc3)
+			_ = store.CreateOrUpdate(doc31)
+			_ = store.CreateOrUpdate(doc4)
+
+			docs, count, err := store.Get(tc.limit, tc.page)
+			if err != nil {
+				t.Fatalf("Get returned an error: %v", err)
+			}
+
+			if diff := cmp.Diff(count, int64(tc.expectCount)); diff != "" {
+				t.Errorf("unexpected document count (-got +want)\n%s", diff)
+			}
+
+			type TestValue struct {
+				Item string `json:"item"`
+			}
+
+			got := []string{}
+			for _, item := range docs {
+				data := TestValue{}
+				_ = json.Unmarshal(item.Value, &data)
+				got = append(got, data.Item)
+			}
+
+			if diff := cmp.Diff(got, tc.expect); diff != "" {
+				t.Errorf("unexpected value (-got +want)\n%s", diff)
+			}
+		})
+	}
+
+}

@@ -1,0 +1,124 @@
+package jstore_test
+
+import (
+	"bytes"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/google/go-cmp/cmp"
+)
+
+func TestHandler(t *testing.T) {
+	// Initialize handler with in-memory database (a map)
+	h := NewHandler()
+
+	tests := []struct {
+		name       string
+		method     string
+		url        string
+		body       interface{}
+		expectCode int
+		expectBody interface{}
+	}{
+		// Test creating a document with POST
+		{
+			name:       "POST Create Document",
+			method:     "POST",
+			url:        "/db/key1",
+			body:       map[string]string{"field": "value"},
+			expectCode: http.StatusCreated,
+			expectBody: map[string]string{"field": "value"},
+		},
+		// Test updating a document with POST
+		{
+			name:       "POST Update Document",
+			method:     "POST",
+			url:        "/db/key1",
+			body:       map[string]string{"field": "new_value"},
+			expectCode: http.StatusOK,
+			expectBody: map[string]string{"field": "new_value"},
+		},
+		// Test retrieving a document with GET
+		{
+			name:       "GET Document",
+			method:     "GET",
+			url:        "/db/key1",
+			expectCode: http.StatusOK,
+			expectBody: map[string]string{"field": "new_value"},
+		},
+		// Test retrieving all documents with GET
+		{
+			name:       "GET All Documents",
+			method:     "GET",
+			url:        "/db",
+			expectCode: http.StatusOK,
+			expectBody: map[string]interface{}{"key1": map[string]string{"field": "new_value"}},
+		},
+		// Test retrieving all documents with query params (e.g., limit)
+		{
+			name:       "GET All Documents with Query Params",
+			method:     "GET",
+			url:        "/db?limit=1",
+			expectCode: http.StatusOK,
+			expectBody: map[string]interface{}{"key1": map[string]string{"field": "new_value"}},
+		},
+		// Test deleting a document with DELETE
+		{
+			name:       "DELETE Document",
+			method:     "DELETE",
+			url:        "/db/key1",
+			expectCode: http.StatusNoContent,
+			expectBody: nil,
+		},
+		// Test getting a non-existent document with GET
+		{
+			name:       "GET Non-Existent Document",
+			method:     "GET",
+			url:        "/db/key2",
+			expectCode: http.StatusNotFound,
+			expectBody: map[string]string{"error": "document not found"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Prepare request body
+			var body []byte
+			var err error
+			if tc.body != nil {
+				body, err = json.Marshal(tc.body)
+				if err != nil {
+					t.Fatalf("failed to marshal request body: %v", err)
+				}
+			}
+
+			// Create request
+			req := httptest.NewRequest(tc.method, tc.url, bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+
+			// Serve the request
+			h.ServeHTTP(rec, req)
+
+			// Check response code
+			if rec.Code != tc.expectCode {
+				t.Errorf("expected status %d; got %d", tc.expectCode, rec.Code)
+			}
+
+			// Check response body if expected
+			if tc.expectBody != nil {
+				var gotBody interface{}
+				if err := json.Unmarshal(rec.Body.Bytes(), &gotBody); err != nil {
+					t.Fatalf("failed to unmarshal response body: %v", err)
+				}
+
+				// Compare expected and actual response
+				if diff := cmp.Diff(tc.expectBody, gotBody); diff != "" {
+					t.Errorf("unexpected response body (-want +got):\n%s", diff)
+				}
+			}
+		})
+	}
+}
