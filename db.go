@@ -1,6 +1,7 @@
 package jsonstore
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -49,7 +50,7 @@ func NewDbStore(db *gorm.DB) (*DbStore, error) {
 	return &store, nil
 }
 
-func (store *DbStore) Set(key, collection string, value json.RawMessage) error {
+func (store *DbStore) Set(ctx context.Context, key, collection string, value json.RawMessage) error {
 	if collection == "" {
 		collection = DefaultCollection
 	}
@@ -64,14 +65,20 @@ func (store *DbStore) Set(key, collection string, value json.RawMessage) error {
 		return err
 	}
 
-	// Create or update document
-	if err = store.db.Save(&doc).Error; err != nil {
-		return fmt.Errorf("failed to save document: %v", err)
+	err = store.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.WithContext(ctx).Save(&doc).Error; err != nil {
+			return fmt.Errorf("failed to save document: %v", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
 	}
+
 	return nil
 }
 
-func (store *DbStore) Get(key, collection string, value *json.RawMessage) error {
+func (store *DbStore) Get(ctx context.Context, key, collection string, value *json.RawMessage) error {
 	if collection == "" {
 		collection = DefaultCollection
 	}
@@ -79,6 +86,7 @@ func (store *DbStore) Get(key, collection string, value *json.RawMessage) error 
 	item := dbDocument{}
 	err := store.db.Model(&dbDocument{}).
 		Select(columnValue).
+		WithContext(ctx).
 		Where(fmt.Sprintf("%s = ? AND %s = ?", columnId, columnCollection), key, collection).
 		First(&item).Error
 	*value = item.Value
@@ -94,7 +102,7 @@ func (store *DbStore) Get(key, collection string, value *json.RawMessage) error 
 
 const MaxListItems = 20
 
-func (store *DbStore) List(collection string, limit, page int) (map[string]json.RawMessage, int64, error) {
+func (store *DbStore) List(ctx context.Context, collection string, limit, page int) (map[string]json.RawMessage, int64, error) {
 	if collection == "" {
 		collection = DefaultCollection
 	}
@@ -109,6 +117,7 @@ func (store *DbStore) List(collection string, limit, page int) (map[string]json.
 	var count int64
 	// Perform a count query based on the collection column.
 	err := store.db.Model(&dbDocument{}).
+		WithContext(ctx).
 		Where(fmt.Sprintf("%s = ? ", columnCollection), collection).
 		Count(&count).Error
 	if err != nil {
@@ -119,6 +128,7 @@ func (store *DbStore) List(collection string, limit, page int) (map[string]json.
 	// Query the database to get all the documents in the collection
 	err = store.db.
 		Model(&dbDocument{}).
+		WithContext(ctx).
 		Where(fmt.Sprintf("%s = ? ", columnCollection), collection).
 		Order("id ASC").
 		Limit(limit).
@@ -135,17 +145,26 @@ func (store *DbStore) List(collection string, limit, page int) (map[string]json.
 	return result, count, nil
 }
 
-func (store *DbStore) Delete(key, collection string) (int64, error) {
+func (store *DbStore) Delete(ctx context.Context, key, collection string) (bool, error) {
 	if collection == "" {
 		collection = DefaultCollection
 	}
 	result := store.db.
+		WithContext(ctx).
 		Where(fmt.Sprintf("%s = ? AND %s = ?", columnId, columnCollection), key, collection).
 		Delete(&dbDocument{})
 
 	// Check if there was an error during the deletion
 	if result.Error != nil {
-		return 0, fmt.Errorf("failed to delete document with ID %s: %v", key, result.Error)
+		return false, fmt.Errorf("failed to delete document with ID %s: %v", key, result.Error)
 	}
-	return result.RowsAffected, nil
+	switch result.RowsAffected {
+	case 0:
+		return false, nil
+	case 1:
+		return true, nil
+	default:
+		return true, fmt.Errorf("unexpected amount of deleted rows, expected 1 or 0, got: %d", result.RowsAffected)
+	}
+
 }

@@ -3,10 +3,14 @@ package jsonstore_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/google/go-cmp/cmp"
 	"os"
+	"path/filepath"
+	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -26,8 +30,10 @@ var _ = spew.Dump //keep the dependency
 func getTargetDBs(t *testing.T) map[string]*gorm.DB {
 	databases := make(map[string]*gorm.DB)
 
-	sqliteDb := newSqliteDb(t)
-	databases["sqlite"] = sqliteDb
+	sqliteDb := newSqliteDbMemory(t)
+	databases["sqlitememory"] = sqliteDb
+	sqliteDbFile := newSqliteDbFile(t)
+	databases["sqlitefile"] = sqliteDbFile
 
 	_, skipTestCont := os.LookupEnv("SKIP_TESTCONTAINERS")
 	if testing.Short() || skipTestCont {
@@ -54,14 +60,48 @@ func getTargetDBs(t *testing.T) map[string]*gorm.DB {
 	return databases
 }
 
-func newSqliteDb(t *testing.T) *gorm.DB {
-	// Set up an in-memory SQLite database for testing
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
+func newSqliteDbMemory(t *testing.T) *gorm.DB {
+	// NOTE: in memory database does not work well with concurrency, if not used with shared
+	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{
 		//Logger: logger.Discard, // discard in tests
 	})
+
 	if err != nil {
 		t.Fatalf("failed to open test database: %v", err)
 	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("failed to get underlying DB: %v", err)
+	}
+
+	sqlDB.SetMaxOpenConns(1) // Only one connection allowed for in memory
+	sqlDB.SetMaxIdleConns(1)
+
+	t.Cleanup(func() {
+		sqlDB.Close() // Ensure all connections are closed after the test
+	})
+
+	return db
+}
+
+func newSqliteDbFile(t *testing.T) *gorm.DB {
+	// NOTE: in memory database does not work well with concurrency, if not used with shared
+	tmpDir := t.TempDir()
+	db, err := gorm.Open(sqlite.Open(filepath.Join(tmpDir, "testdb.sqlite")), &gorm.Config{
+		//Logger: logger.Discard, // discard in tests
+	})
+
+	if err != nil {
+		t.Fatalf("failed to open test database: %v", err)
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("failed to get underlying DB: %v", err)
+	}
+
+	t.Cleanup(func() {
+		sqlDB.Close() // Ensure all connections are closed after the test
+	})
 	return db
 }
 
@@ -195,6 +235,14 @@ func TestDb(t *testing.T) {
 			t.Run("test action List", func(t *testing.T) {
 				testActionList(t, db)
 			})
+
+			t.Run("test action delete", func(t *testing.T) {
+				testActionDelete(t, db)
+			})
+
+			t.Run("concurrency", func(t *testing.T) {
+				testConcurrency(t, db)
+			})
 		})
 	}
 }
@@ -231,7 +279,7 @@ func testActionSet(t *testing.T, db *gorm.DB) {
 			Value:      json.RawMessage(`{"item": "my value"}`),
 		}
 
-		err = store.Set(item.ID, item.Collection, item.Value)
+		err = store.Set(context.Background(), item.ID, item.Collection, item.Value)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
@@ -258,14 +306,14 @@ func testActionSet(t *testing.T, db *gorm.DB) {
 			Value:      json.RawMessage(`{"item": "my value"}`),
 		}
 
-		err = store.Set(item.ID, item.Collection, item.Value)
+		err = store.Set(context.Background(), item.ID, item.Collection, item.Value)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
 
 		// Update the document with new data
 		item.Value = json.RawMessage(`{"item": "updated value"}`)
-		err = store.Set(item.ID, item.Collection, item.Value)
+		err = store.Set(context.Background(), item.ID, item.Collection, item.Value)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
@@ -292,7 +340,7 @@ func testActionSet(t *testing.T, db *gorm.DB) {
 			Value:      json.RawMessage(`{"item": "my value1"}`),
 		}
 
-		err = store.Set(item1.ID, item1.Collection, item1.Value)
+		err = store.Set(context.Background(), item1.ID, item1.Collection, item1.Value)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
@@ -304,7 +352,7 @@ func testActionSet(t *testing.T, db *gorm.DB) {
 			Value:      json.RawMessage(`{"item": "my value2"}`),
 		}
 
-		err = store.Set(item2.ID, item2.Collection, item2.Value)
+		err = store.Set(context.Background(), item2.ID, item2.Collection, item2.Value)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
@@ -338,13 +386,13 @@ func testActionGet(t *testing.T, db *gorm.DB) {
 			Value:      json.RawMessage(`{"item": "my value"}`),
 		}
 
-		err = store.Set(item.ID, item.Collection, item.Value)
+		err = store.Set(context.Background(), item.ID, item.Collection, item.Value)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
 
 		var got json.RawMessage
-		err = store.Get(item.ID, item.Collection, &got)
+		err = store.Get(context.Background(), item.ID, item.Collection, &got)
 		if err != nil {
 			t.Fatalf("action: Get,  returned an error: %v", err)
 		}
@@ -364,20 +412,20 @@ func testActionGet(t *testing.T, db *gorm.DB) {
 			Value:      json.RawMessage(`{"item": "my value"}`),
 		}
 
-		err = store.Set(item.ID, item.Collection, item.Value)
+		err = store.Set(context.Background(), item.ID, item.Collection, item.Value)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
 
 		// Update the document with new data
 		item.Value = json.RawMessage(`{"item": "updated value"}`)
-		err = store.Set(item.ID, item.Collection, item.Value)
+		err = store.Set(context.Background(), item.ID, item.Collection, item.Value)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
 
 		var got json.RawMessage
-		err = store.Get(item.ID, item.Collection, &got)
+		err = store.Get(context.Background(), item.ID, item.Collection, &got)
 		if err != nil {
 			t.Fatalf("action: Get,  returned an error: %v", err)
 		}
@@ -397,7 +445,7 @@ func testActionGet(t *testing.T, db *gorm.DB) {
 			Value:      json.RawMessage(`{"item": "my value"}`),
 		}
 
-		err = store.Set(item1.ID, item1.Collection, item1.Value)
+		err = store.Set(context.Background(), item1.ID, item1.Collection, item1.Value)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
@@ -409,14 +457,14 @@ func testActionGet(t *testing.T, db *gorm.DB) {
 			Value:      json.RawMessage(`{"item": "my value2"}`),
 		}
 
-		err = store.Set(item2.ID, item2.Collection, item2.Value)
+		err = store.Set(context.Background(), item2.ID, item2.Collection, item2.Value)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
 
 		// retrieve item 1
 		var got json.RawMessage
-		err = store.Get(item1.ID, item1.Collection, &got)
+		err = store.Get(context.Background(), item1.ID, item1.Collection, &got)
 		if err != nil {
 			t.Fatalf("action: Get,  returned an error: %v", err)
 		}
@@ -425,7 +473,7 @@ func testActionGet(t *testing.T, db *gorm.DB) {
 		}
 
 		// retrieve item 2
-		err = store.Get(item2.ID, item2.Collection, &got)
+		err = store.Get(context.Background(), item2.ID, item2.Collection, &got)
 		if err != nil {
 			t.Fatalf("action: Get,  returned an error: %v", err)
 		}
@@ -433,7 +481,6 @@ func testActionGet(t *testing.T, db *gorm.DB) {
 			t.Errorf("unexpected value (-got +want)\n%s", diff)
 		}
 	})
-
 }
 
 func testActionList(t *testing.T, db *gorm.DB) {
@@ -445,7 +492,7 @@ func testActionList(t *testing.T, db *gorm.DB) {
 	// add 3 items to collection 1
 
 	for i := 1; i <= 3; i++ {
-		err = store.Set(fmt.Sprintf("item%d", i), "col1",
+		err = store.Set(context.Background(), fmt.Sprintf("item%d", i), "col1",
 			json.RawMessage(fmt.Sprintf("{\"item\": \"collection1 item%d\"}", i)))
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
@@ -453,7 +500,7 @@ func testActionList(t *testing.T, db *gorm.DB) {
 	}
 	// add 5 items to collection 1
 	for i := 1; i <= 5; i++ {
-		err = store.Set(fmt.Sprintf("item%d", i), "col2",
+		err = store.Set(context.Background(), fmt.Sprintf("item%d", i), "col2",
 			json.RawMessage(fmt.Sprintf("{\"item\": \"collection2 item%d\"}", i)))
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
@@ -461,7 +508,7 @@ func testActionList(t *testing.T, db *gorm.DB) {
 	}
 
 	t.Run("asert collection length", func(t *testing.T) {
-		_, len1, err := store.List("col1", 0, 1)
+		_, len1, err := store.List(context.Background(), "col1", 0, 1)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
@@ -469,7 +516,7 @@ func testActionList(t *testing.T, db *gorm.DB) {
 			t.Errorf("unexpected value (-got +want)\n%s", diff)
 		}
 
-		_, len2, err := store.List("col2", 0, 1)
+		_, len2, err := store.List(context.Background(), "col2", 0, 1)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
@@ -479,7 +526,7 @@ func testActionList(t *testing.T, db *gorm.DB) {
 	})
 
 	t.Run("asert listed items", func(t *testing.T) {
-		items, _, err := store.List("col1", 0, 1)
+		items, _, err := store.List(context.Background(), "col1", 0, 1)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
@@ -495,7 +542,7 @@ func testActionList(t *testing.T, db *gorm.DB) {
 	})
 
 	t.Run("asert list with limit", func(t *testing.T) {
-		items, _, err := store.List("col1", 2, 1)
+		items, _, err := store.List(context.Background(), "col1", 2, 1)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
@@ -510,7 +557,7 @@ func testActionList(t *testing.T, db *gorm.DB) {
 	})
 
 	t.Run("asert list with limit and page", func(t *testing.T) {
-		items, _, err := store.List("col1", 2, 2)
+		items, _, err := store.List(context.Background(), "col1", 2, 2)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
@@ -521,5 +568,136 @@ func testActionList(t *testing.T, db *gorm.DB) {
 		if diff := cmp.Diff(items, want); diff != "" {
 			t.Errorf("unexpected value (-got +want)\n%s", diff)
 		}
+	})
+}
+
+func testActionDelete(t *testing.T, db *gorm.DB) {
+
+	t.Run("delete value", func(t *testing.T) {
+		store, err := jsonstore.NewDbStore(db)
+		if err != nil {
+			t.Fatalf("NewDbStore returned an error: %v", err)
+		}
+		item := dbDocument{
+			ID:         "item1",
+			Collection: "test_set_value",
+			Value:      json.RawMessage(`{"item": "my value"}`),
+		}
+
+		err = store.Set(context.Background(), item.ID, item.Collection, item.Value)
+		if err != nil {
+			t.Fatalf("action: Set,  returned an error: %v", err)
+		}
+
+		deleted, err := store.Delete(context.Background(), item.ID, item.Collection)
+		if err != nil {
+			t.Fatalf("action: Get,  returned an error: %v", err)
+		}
+		if deleted == false {
+			t.Errorf("expect Delete to affect one entry, but got false for no rows affected")
+		}
+
+		// Retrieve the document from the database and verify its content
+		var got dbDocument
+		err = db.First(&got, "ID = ? AND Collection = ?", item.ID, item.Collection).Error
+		if err != nil {
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		}
+	})
+
+	t.Run("delete non existent item", func(t *testing.T) {
+		store, err := jsonstore.NewDbStore(db)
+		if err != nil {
+			t.Fatalf("NewDbStore returned an error: %v", err)
+		}
+		item := dbDocument{
+			ID:         "item1",
+			Collection: "test_set_value",
+			Value:      json.RawMessage(`{"item": "my value"}`),
+		}
+
+		deleted, err := store.Delete(context.Background(), item.ID, item.Collection)
+		if err != nil {
+			t.Fatalf("action: Get,  returned an error: %v", err)
+		}
+		if deleted == true {
+			t.Errorf("expect Delete to NOT affect any entry, but got true for 1 rows affected")
+		}
+
+		// Retrieve the document from the database and verify its content
+		var got dbDocument
+		err = db.First(&got, "ID = ? AND Collection = ?", item.ID, item.Collection).Error
+		if err != nil {
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		}
+	})
+}
+
+func testConcurrency(t *testing.T, db *gorm.DB) {
+
+	t.Run("multiple read", func(t *testing.T) {
+
+		store, err := jsonstore.NewDbStore(db)
+		if err != nil {
+			t.Fatalf("NewDbStore returned an error: %v", err)
+		}
+
+		value := json.RawMessage(`{"item": "my value"}`)
+		err = store.Set(context.Background(), "test", "main", value)
+		if err != nil {
+			t.Fatalf("action: Set,  returned an error: %v", err)
+		}
+
+		wg := sync.WaitGroup{}
+		for i := 0; i <= 50; i++ {
+			wg.Add(1)
+			go func() {
+
+				defer wg.Done()
+
+				var got json.RawMessage
+				ctx := context.Background()
+				err = store.Get(ctx, "test", "main", &got)
+				if err != nil {
+					t.Errorf("action: Get,  returned an error: %v", err)
+					return
+				}
+
+				if diff := cmp.Diff(got, value); diff != "" {
+					t.Errorf("unexpected value (-got +want)\n%s", diff)
+					return
+				}
+				return
+			}()
+		}
+		wg.Wait()
+	})
+
+	t.Run("multiple write", func(t *testing.T) {
+
+		store, err := jsonstore.NewDbStore(db)
+		if err != nil {
+			t.Fatalf("NewDbStore returned an error: %v", err)
+		}
+
+		wg := sync.WaitGroup{}
+		for i := 0; i <= 5; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+
+				value := json.RawMessage(`{"item": "my value` + strconv.Itoa(i) + `"}`)
+				err = store.Set(context.Background(), "test", "main", value)
+				if err != nil {
+					t.Errorf("action: SET,  returned an error: %v", err)
+					return
+				}
+			}()
+		}
+		wg.Wait()
 	})
 }
