@@ -34,7 +34,7 @@ type DbStore struct {
 	db *gorm.DB
 }
 
-// make sure the DB store fulfills the JsonStore interface
+// make sure the DB store fulfills the JsonStoreList interface
 var _ JsonStore = &DbStore{}
 
 const DefaultCollection = "default"

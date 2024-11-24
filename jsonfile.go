@@ -1,20 +1,26 @@
 package jsonstore
 
 import (
+	"context"
+	"encoding/json"
 	"os"
 	"sync"
 )
 
 type FileStore struct {
-	file    string
-	mutex   sync.Mutex
-	content map[string]interface{}
+	file      string
+	mutex     sync.RWMutex
+	fileMutex sync.Mutex
+	content   map[string]map[string]json.RawMessage
 
 	// flags
 	inMemory      bool
 	ManualFlush   bool
 	humanReadable bool
 }
+
+// make sure the jsonfile store fulfills the JsonStore interface
+var _ JsonStore = &FileStore{}
 
 type FileStoreFlag int
 
@@ -28,7 +34,7 @@ func NewFileStore(file string, flags ...FileStoreFlag) (*FileStore, error) {
 
 	db := FileStore{
 		file:          file,
-		content:       map[string]interface{}{},
+		content:       map[string]map[string]json.RawMessage{},
 		inMemory:      true,
 		ManualFlush:   isFlagSet(flags, ManualFlush),
 		humanReadable: !isFlagSet(flags, MinimizedJson),
@@ -55,4 +61,69 @@ func isFlagSet(in []FileStoreFlag, search FileStoreFlag) bool {
 		}
 	}
 	return false
+}
+
+func (f *FileStore) colExists(name string) bool {
+	if _, ok := f.content[name]; !ok {
+		return false
+	}
+	return true
+}
+
+func (f *FileStore) Json() []byte {
+	var bytes []byte
+	var err error
+	// json.Marshal function can return two types of errors: UnsupportedTypeError or UnsupportedValueError
+	// both cases are handled when adding data with Set, hence omitting error handling here
+	if f.humanReadable {
+		bytes, err = json.MarshalIndent(f.content, "", "    ")
+		if err != nil {
+			panic(err)
+		}
+	} else {
+		bytes, err = json.Marshal(f.content)
+		if err != nil {
+			panic(err)
+		}
+	}
+	return bytes
+}
+
+func (f *FileStore) flushToFile() error {
+
+	bytes := f.Json()
+	err := os.WriteFile(f.file, bytes, 0644)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (f *FileStore) Set(ctx context.Context, key, collection string, value json.RawMessage) error {
+	// TODO handle ctx
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+	if !f.colExists(collection) {
+		f.content[collection] = map[string]json.RawMessage{}
+	}
+	f.content[collection][key] = value
+	if !f.inMemory && !f.ManualFlush {
+		return f.flushToFile()
+	}
+	return nil
+}
+
+func (f *FileStore) List(ctx context.Context, collection string, limit, page int) (map[string]json.RawMessage, int64, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (f *FileStore) Get(ctx context.Context, key, collection string, value *json.RawMessage) error {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (f *FileStore) Delete(ctx context.Context, key, collection string) (bool, error) {
+	//TODO implement me
+	panic("implement me")
 }
