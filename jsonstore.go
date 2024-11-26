@@ -12,3 +12,5 @@ type JsonStore interface {
 	Delete(ctx context.Context, key, collection string) (bool, error)
 	List(ctx context.Context, collection string, limit, page int) (map[string]json.RawMessage, int64, error)
 }
+
+var NonExistedCollectionErr error

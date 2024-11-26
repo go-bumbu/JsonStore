@@ -12,8 +12,6 @@ test: ## run fast go tests
 test-full: ## run go full tests (uses test containers)
 	@go test ./... -cover
 
-
-
 lint: ## run go linter
 	# depends on https://github.com/golangci/golangci-lint
 	@golangci-lint run
@@ -23,6 +21,11 @@ benchmark: ## run go benchmarks
 
 .PHONY: verify
 verify: test-full lint benchmark ## run all tests
+
+cover-report: ## generate a coverage report
+	go test -covermode=count -coverpkg=./... -coverprofile cover.out  ./...
+	go tool cover -html cover.out -o cover.html
+	open cover.html
 
 #==========================================================================================
 ##@ Release

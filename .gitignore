@@ -1,6 +1,8 @@
 # ---> Go
 # Test binary, build with `go test -c`
 *.test
+cover.out
+cover.html
 
 # IDE shenanigans
 *.iml

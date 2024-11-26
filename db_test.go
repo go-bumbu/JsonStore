@@ -671,7 +671,6 @@ func testConcurrency(t *testing.T, db *gorm.DB) {
 					t.Errorf("unexpected value (-got +want)\n%s", diff)
 					return
 				}
-				return
 			}()
 		}
 		wg.Wait()
