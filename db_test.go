@@ -63,7 +63,7 @@ func getTargetDBs(t *testing.T) map[string]*gorm.DB {
 func newSqliteDbMemory(t *testing.T) *gorm.DB {
 	// NOTE: in memory database does not work well with concurrency, if not used with shared
 	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{
-		//Logger: logger.Discard, // discard in tests
+		Logger: logger.Discard, // Discard grom sql messages  in tests
 	})
 
 	if err != nil {
@@ -88,7 +88,7 @@ func newSqliteDbFile(t *testing.T) *gorm.DB {
 	// NOTE: in memory database does not work well with concurrency, if not used with shared
 	tmpDir := t.TempDir()
 	db, err := gorm.Open(sqlite.Open(filepath.Join(tmpDir, "testdb.sqlite")), &gorm.Config{
-		//Logger: logger.Discard, // discard in tests
+		Logger: logger.Discard, // Discard grom sql messages  in tests
 	})
 
 	if err != nil {
@@ -279,7 +279,7 @@ func testActionSet(t *testing.T, db *gorm.DB) {
 			Value:      json.RawMessage(`{"item": "my value"}`),
 		}
 
-		err = store.Set(context.Background(), item.ID, item.Collection, item.Value)
+		err = store.Set(context.Background(), item.Collection, item.ID, item.Value)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
@@ -306,14 +306,14 @@ func testActionSet(t *testing.T, db *gorm.DB) {
 			Value:      json.RawMessage(`{"item": "my value"}`),
 		}
 
-		err = store.Set(context.Background(), item.ID, item.Collection, item.Value)
+		err = store.Set(context.Background(), item.Collection, item.ID, item.Value)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
 
 		// Update the document with new data
 		item.Value = json.RawMessage(`{"item": "updated value"}`)
-		err = store.Set(context.Background(), item.ID, item.Collection, item.Value)
+		err = store.Set(context.Background(), item.Collection, item.ID, item.Value)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
@@ -340,7 +340,7 @@ func testActionSet(t *testing.T, db *gorm.DB) {
 			Value:      json.RawMessage(`{"item": "my value1"}`),
 		}
 
-		err = store.Set(context.Background(), item1.ID, item1.Collection, item1.Value)
+		err = store.Set(context.Background(), item1.Collection, item1.ID, item1.Value)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
@@ -352,7 +352,7 @@ func testActionSet(t *testing.T, db *gorm.DB) {
 			Value:      json.RawMessage(`{"item": "my value2"}`),
 		}
 
-		err = store.Set(context.Background(), item2.ID, item2.Collection, item2.Value)
+		err = store.Set(context.Background(), item2.Collection, item2.ID, item2.Value)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
@@ -386,13 +386,13 @@ func testActionGet(t *testing.T, db *gorm.DB) {
 			Value:      json.RawMessage(`{"item": "my value"}`),
 		}
 
-		err = store.Set(context.Background(), item.ID, item.Collection, item.Value)
+		err = store.Set(context.Background(), item.Collection, item.ID, item.Value)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
 
 		var got json.RawMessage
-		err = store.Get(context.Background(), item.ID, item.Collection, &got)
+		err = store.Get(context.Background(), item.Collection, item.ID, &got)
 		if err != nil {
 			t.Fatalf("action: Get,  returned an error: %v", err)
 		}
@@ -412,20 +412,20 @@ func testActionGet(t *testing.T, db *gorm.DB) {
 			Value:      json.RawMessage(`{"item": "my value"}`),
 		}
 
-		err = store.Set(context.Background(), item.ID, item.Collection, item.Value)
+		err = store.Set(context.Background(), item.Collection, item.ID, item.Value)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
 
 		// Update the document with new data
 		item.Value = json.RawMessage(`{"item": "updated value"}`)
-		err = store.Set(context.Background(), item.ID, item.Collection, item.Value)
+		err = store.Set(context.Background(), item.Collection, item.ID, item.Value)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
 
 		var got json.RawMessage
-		err = store.Get(context.Background(), item.ID, item.Collection, &got)
+		err = store.Get(context.Background(), item.Collection, item.ID, &got)
 		if err != nil {
 			t.Fatalf("action: Get,  returned an error: %v", err)
 		}
@@ -445,7 +445,7 @@ func testActionGet(t *testing.T, db *gorm.DB) {
 			Value:      json.RawMessage(`{"item": "my value"}`),
 		}
 
-		err = store.Set(context.Background(), item1.ID, item1.Collection, item1.Value)
+		err = store.Set(context.Background(), item1.Collection, item1.ID, item1.Value)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
@@ -457,14 +457,14 @@ func testActionGet(t *testing.T, db *gorm.DB) {
 			Value:      json.RawMessage(`{"item": "my value2"}`),
 		}
 
-		err = store.Set(context.Background(), item2.ID, item2.Collection, item2.Value)
+		err = store.Set(context.Background(), item2.Collection, item2.ID, item2.Value)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
 
 		// retrieve item 1
 		var got json.RawMessage
-		err = store.Get(context.Background(), item1.ID, item1.Collection, &got)
+		err = store.Get(context.Background(), item1.Collection, item1.ID, &got)
 		if err != nil {
 			t.Fatalf("action: Get,  returned an error: %v", err)
 		}
@@ -473,7 +473,7 @@ func testActionGet(t *testing.T, db *gorm.DB) {
 		}
 
 		// retrieve item 2
-		err = store.Get(context.Background(), item2.ID, item2.Collection, &got)
+		err = store.Get(context.Background(), item2.Collection, item2.ID, &got)
 		if err != nil {
 			t.Fatalf("action: Get,  returned an error: %v", err)
 		}
@@ -492,7 +492,7 @@ func testActionList(t *testing.T, db *gorm.DB) {
 	// add 3 items to collection 1
 
 	for i := 1; i <= 3; i++ {
-		err = store.Set(context.Background(), fmt.Sprintf("item%d", i), "col1",
+		err = store.Set(context.Background(), "col1", fmt.Sprintf("item%d", i),
 			json.RawMessage(fmt.Sprintf("{\"item\": \"collection1 item%d\"}", i)))
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
@@ -500,7 +500,7 @@ func testActionList(t *testing.T, db *gorm.DB) {
 	}
 	// add 5 items to collection 1
 	for i := 1; i <= 5; i++ {
-		err = store.Set(context.Background(), fmt.Sprintf("item%d", i), "col2",
+		err = store.Set(context.Background(), "col2", fmt.Sprintf("item%d", i),
 			json.RawMessage(fmt.Sprintf("{\"item\": \"collection2 item%d\"}", i)))
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
@@ -584,12 +584,12 @@ func testActionDelete(t *testing.T, db *gorm.DB) {
 			Value:      json.RawMessage(`{"item": "my value"}`),
 		}
 
-		err = store.Set(context.Background(), item.ID, item.Collection, item.Value)
+		err = store.Set(context.Background(), item.Collection, item.ID, item.Value)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
 
-		deleted, err := store.Delete(context.Background(), item.ID, item.Collection)
+		deleted, err := store.Delete(context.Background(), item.Collection, item.ID)
 		if err != nil {
 			t.Fatalf("action: Get,  returned an error: %v", err)
 		}
@@ -618,7 +618,7 @@ func testActionDelete(t *testing.T, db *gorm.DB) {
 			Value:      json.RawMessage(`{"item": "my value"}`),
 		}
 
-		deleted, err := store.Delete(context.Background(), item.ID, item.Collection)
+		deleted, err := store.Delete(context.Background(), item.Collection, item.ID)
 		if err != nil {
 			t.Fatalf("action: Get,  returned an error: %v", err)
 		}

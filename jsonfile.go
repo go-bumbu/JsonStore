@@ -22,7 +22,7 @@ type FileStore struct {
 }
 
 // make sure the jsonfile store fulfills the JsonStore interface
-var _ JsonStore = &FileStore{}
+var _ JsonStorer = &FileStore{}
 
 type FileStoreFlag int
 
@@ -101,7 +101,16 @@ func (f *FileStore) flushToFile() error {
 	return nil
 }
 
-func (f *FileStore) Set(ctx context.Context, key, collection string, value json.RawMessage) error {
+func (f *FileStore) Flush() error {
+	if !f.inMemory && !f.ManualFlush {
+		f.mutex.Lock()
+		defer f.mutex.Unlock()
+		return f.flushToFile()
+	}
+	return nil
+}
+
+func (f *FileStore) Set(ctx context.Context, collection, key string, value json.RawMessage) error {
 
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
@@ -116,10 +125,10 @@ func (f *FileStore) Set(ctx context.Context, key, collection string, value json.
 	return nil
 }
 
-func (f *FileStore) Get(ctx context.Context, key, collection string, value *json.RawMessage) error {
+func (f *FileStore) Get(ctx context.Context, collection, key string, value *json.RawMessage) error {
 
 	if !f.colExists(collection) {
-		return NonExistedCollectionErr
+		return CollectionNotFoundErr
 	}
 	f.mutex.RLock()
 	defer f.mutex.RUnlock()
@@ -182,7 +191,7 @@ func (f *FileStore) List(ctx context.Context, collection string, limit, page int
 		collection = DefaultCollection
 	}
 	if !f.colExists(collection) {
-		return nil, 0, NonExistedCollectionErr
+		return nil, 0, CollectionNotFoundErr
 	}
 	collen := len(f.content[collection])
 
@@ -206,7 +215,7 @@ func (f *FileStore) List(ctx context.Context, collection string, limit, page int
 		end = len(keys)
 	}
 
-	// Create the resulting map with paginated keys
+	// Set the resulting map with paginated keys
 	result := make(map[string]json.RawMessage, end-offset)
 	for _, key := range keys[offset:end] {
 		result[key] = f.content[collection][key]
@@ -215,11 +224,11 @@ func (f *FileStore) List(ctx context.Context, collection string, limit, page int
 
 }
 
-func (f *FileStore) Delete(ctx context.Context, key, collection string) (bool, error) {
+func (f *FileStore) Delete(ctx context.Context, collection, key string) (bool, error) {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
 	if !f.colExists(collection) {
-		return false, NonExistedCollectionErr
+		return false, CollectionNotFoundErr
 	}
 
 	entryDeleted := false

@@ -21,7 +21,7 @@ func TestJsonfileSet(t *testing.T) {
 			Value:      json.RawMessage(`{"item": "my value"}`),
 		}
 
-		err := store.Set(context.Background(), item.ID, item.Collection, item.Value)
+		err := store.Set(context.Background(), item.Collection, item.ID, item.Value)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
@@ -41,7 +41,7 @@ func TestJsonfileSet(t *testing.T) {
 			Value:      json.RawMessage(`{"item": "my value"}`),
 		}
 
-		err := store.Set(context.Background(), item.ID, item.Collection, item.Value)
+		err := store.Set(context.Background(), item.Collection, item.ID, item.Value)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
@@ -49,7 +49,7 @@ func TestJsonfileSet(t *testing.T) {
 		// modify the data
 		item.Value = json.RawMessage(`{"item": "my value changed"}`)
 
-		err = store.Set(context.Background(), item.ID, item.Collection, item.Value)
+		err = store.Set(context.Background(), item.Collection, item.ID, item.Value)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
@@ -67,7 +67,7 @@ func TestJsonfileSet(t *testing.T) {
 			Value:      json.RawMessage(`{"item": "my value1"}`),
 		}
 
-		err := store.Set(context.Background(), item1.ID, item1.Collection, item1.Value)
+		err := store.Set(context.Background(), item1.Collection, item1.ID, item1.Value)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
@@ -79,7 +79,7 @@ func TestJsonfileSet(t *testing.T) {
 			Value:      json.RawMessage(`{"item": "my value2"}`),
 		}
 
-		err = store.Set(context.Background(), item2.ID, item2.Collection, item2.Value)
+		err = store.Set(context.Background(), item2.Collection, item2.ID, item2.Value)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
@@ -115,13 +115,13 @@ func TestJsonfileGet(t *testing.T) {
 			Value:      json.RawMessage(`{"item":"my value"}`),
 		}
 
-		err := store.Set(context.Background(), item.ID, item.Collection, item.Value)
+		err := store.Set(context.Background(), item.Collection, item.ID, item.Value)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
 
 		var got json.RawMessage
-		err = store.Get(context.Background(), item.ID, item.Collection, &got)
+		err = store.Get(context.Background(), item.Collection, item.ID, &got)
 		if err != nil {
 			t.Fatalf("action: Get,  returned an error: %v", err)
 		}
@@ -137,20 +137,20 @@ func TestJsonfileGet(t *testing.T) {
 			Value:      json.RawMessage(`{"item":"my value"}`),
 		}
 
-		err := store.Set(context.Background(), item.ID, item.Collection, item.Value)
+		err := store.Set(context.Background(), item.Collection, item.ID, item.Value)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
 
 		// Update the document with new data
 		item.Value = json.RawMessage(`{"item":"updated value"}`)
-		err = store.Set(context.Background(), item.ID, item.Collection, item.Value)
+		err = store.Set(context.Background(), item.Collection, item.ID, item.Value)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
 
 		var got json.RawMessage
-		err = store.Get(context.Background(), item.ID, item.Collection, &got)
+		err = store.Get(context.Background(), item.Collection, item.ID, &got)
 		if err != nil {
 			t.Fatalf("action: Get,  returned an error: %v", err)
 		}
@@ -166,7 +166,7 @@ func TestJsonfileGet(t *testing.T) {
 			Value:      json.RawMessage(`{"item":"my value1"}`),
 		}
 
-		err := store.Set(context.Background(), item1.ID, item1.Collection, item1.Value)
+		err := store.Set(context.Background(), item1.Collection, item1.ID, item1.Value)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
@@ -175,7 +175,7 @@ func TestJsonfileGet(t *testing.T) {
 			Collection: "collection1",
 			Value:      json.RawMessage(`{"item":"my value2_on col1"}`),
 		}
-		err = store.Set(context.Background(), item1.ID, item1.Collection, item1.Value)
+		err = store.Set(context.Background(), item1.Collection, item1.ID, item1.Value)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
@@ -187,14 +187,14 @@ func TestJsonfileGet(t *testing.T) {
 			Value:      json.RawMessage(`{"item":"my value2"}`),
 		}
 
-		err = store.Set(context.Background(), item2.ID, item2.Collection, item2.Value)
+		err = store.Set(context.Background(), item2.Collection, item2.ID, item2.Value)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
 
 		// retrieve item 1
 		var got json.RawMessage
-		err = store.Get(context.Background(), item1.ID, item1.Collection, &got)
+		err = store.Get(context.Background(), item1.Collection, item1.ID, &got)
 		if err != nil {
 			t.Fatalf("action: Get,  returned an error: %v", err)
 		}
@@ -203,7 +203,7 @@ func TestJsonfileGet(t *testing.T) {
 		}
 
 		// retrieve item 2
-		err = store.Get(context.Background(), item2.ID, item2.Collection, &got)
+		err = store.Get(context.Background(), item2.Collection, item2.ID, &got)
 		if err != nil {
 			t.Fatalf("action: Get,  returned an error: %v", err)
 		}
@@ -226,12 +226,12 @@ func TestJsonfileDelete(t *testing.T) {
 			Value:      json.RawMessage(`{"item": "my value"}`),
 		}
 
-		err := store.Set(context.Background(), item.ID, item.Collection, item.Value)
+		err := store.Set(context.Background(), item.Collection, item.ID, item.Value)
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
 		}
 
-		deleted, err := store.Delete(context.Background(), item.ID, item.Collection)
+		deleted, err := store.Delete(context.Background(), item.Collection, item.ID)
 		if err != nil {
 			t.Fatalf("action: Get,  returned an error: %v", err)
 		}
@@ -253,7 +253,7 @@ func TestJsonfileDelete(t *testing.T) {
 			Value:      json.RawMessage(`{"item": "my value"}`),
 		}
 
-		deleted, err := store.Delete(context.Background(), item.ID, item.Collection)
+		deleted, err := store.Delete(context.Background(), item.Collection, item.ID)
 		if err != nil {
 			t.Fatalf("action: Get,  returned an error: %v", err)
 		}
@@ -278,7 +278,7 @@ func TestJsonfileList(t *testing.T) {
 	// add 3 items to collection 1
 
 	for i := 1; i <= 3; i++ {
-		err = store.Set(context.Background(), fmt.Sprintf("item%d", i), "col1",
+		err = store.Set(context.Background(), "col1", fmt.Sprintf("item%d", i),
 			json.RawMessage(fmt.Sprintf("{\"item\": \"collection1 item%d\"}", i)))
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)
@@ -286,7 +286,7 @@ func TestJsonfileList(t *testing.T) {
 	}
 	// add 5 items to collection 1
 	for i := 1; i <= 5; i++ {
-		err = store.Set(context.Background(), fmt.Sprintf("item%d", i), "col2",
+		err = store.Set(context.Background(), "col2", fmt.Sprintf("item%d", i),
 			json.RawMessage(fmt.Sprintf("{\"item\": \"collection2 item%d\"}", i)))
 		if err != nil {
 			t.Fatalf("action: Set,  returned an error: %v", err)

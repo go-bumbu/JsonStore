@@ -35,7 +35,7 @@ type DbStore struct {
 }
 
 // make sure the DB store fulfills the JsonStoreList interface
-var _ JsonStore = &DbStore{}
+var _ JsonStorer = &DbStore{}
 
 const DefaultCollection = "default"
 
@@ -50,7 +50,7 @@ func NewDbStore(db *gorm.DB) (*DbStore, error) {
 	return &store, nil
 }
 
-func (store *DbStore) Set(ctx context.Context, key, collection string, value json.RawMessage) error {
+func (store *DbStore) Set(ctx context.Context, collection, key string, value json.RawMessage) error {
 	if collection == "" {
 		collection = DefaultCollection
 	}
@@ -78,7 +78,7 @@ func (store *DbStore) Set(ctx context.Context, key, collection string, value jso
 	return nil
 }
 
-func (store *DbStore) Get(ctx context.Context, key, collection string, value *json.RawMessage) error {
+func (store *DbStore) Get(ctx context.Context, collection, key string, value *json.RawMessage) error {
 	if collection == "" {
 		collection = DefaultCollection
 	}
@@ -145,7 +145,7 @@ func (store *DbStore) List(ctx context.Context, collection string, limit, page i
 	return result, count, nil
 }
 
-func (store *DbStore) Delete(ctx context.Context, key, collection string) (bool, error) {
+func (store *DbStore) Delete(ctx context.Context, collection, key string) (bool, error) {
 	if collection == "" {
 		collection = DefaultCollection
 	}
