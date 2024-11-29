@@ -19,8 +19,12 @@ lint: ## run go linter
 benchmark: ## run go benchmarks
 	@go test -run=^$$ -bench=. ./...
 
+license-check: ## check for invalid licenses
+	# depends on : https://github.com/elastic/go-licence-detector
+	@go list -m -mod=readonly  -json all  | go-licence-detector -includeIndirect -validate -rules allowedLicenses.json
+
 .PHONY: verify
-verify: test-full lint benchmark ## run all tests
+verify: license-check lint test-full  benchmark ## run all tests
 
 cover-report: ## generate a coverage report
 	go test -covermode=count -coverpkg=./... -coverprofile cover.out  ./...
